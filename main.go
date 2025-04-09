@@ -1,13 +1,21 @@
 package main
 
 import (
+	"database/sql"
+	"log"
 	"net/http"
+	"os"
 	"sync/atomic"
+
+	"github.com/joho/godotenv"
+	_ "github.com/lib/pq"
+	"github.com/venzy/chirpy/internal/database"
 )
 
 type apiConfig struct {
 	fileserverHits atomic.Int32
 	maxChirpLength int
+	db *database.Queries
 }
 
 func (cfg *apiConfig) withMetricsInc(next http.Handler) http.Handler {
@@ -18,7 +26,19 @@ func (cfg *apiConfig) withMetricsInc(next http.Handler) http.Handler {
 }
 
 func main() {
-	cfg := &apiConfig{maxChirpLength: 140}
+	godotenv.Load()
+	dbURL := os.Getenv("DB_URL")
+	db, err := sql.Open("postgres", dbURL)
+	if err != nil {
+		log.Fatalf("Problem opening database: %v\n", err)
+	}
+
+	dbQueries := database.New(db)
+	cfg := &apiConfig{
+		maxChirpLength: 140,
+		db: dbQueries,
+	}
+
 	mux := http.NewServeMux()
 	mux.Handle("/app/", cfg.withMetricsInc(http.StripPrefix("/app", http.FileServer(http.Dir(".")))))
 	mux.HandleFunc("GET /api/healthz", handleReady)
