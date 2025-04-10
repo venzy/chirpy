@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-func (cfg *apiConfig) handleValidate(response http.ResponseWriter, request *http.Request) {
+func (cfg *apiConfig) handleCreateChirp(response http.ResponseWriter, request *http.Request) {
 	type requestParams struct {
 		Body string `json:"body"`
 	}
