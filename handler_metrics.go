@@ -19,8 +19,3 @@ func (cfg *apiConfig) handleMetrics(response http.ResponseWriter, _ *http.Reques
 </html>
 `, cfg.fileserverHits.Load()))
 }
-
-func (cfg *apiConfig) handleMetricsReset(response http.ResponseWriter, _ *http.Request) {
-	cfg.fileserverHits.Store(0)
-	response.WriteHeader(http.StatusOK)
-}

@@ -37,36 +37,6 @@ func (cfg *apiConfig) handleValidate(response http.ResponseWriter, request *http
 	}
 }
 
-func respondWithError(response http.ResponseWriter, code int, msg string) {
-	type errorResponse struct {
-		Error string `json:"error"`
-	}
-
-	responseBody, err := json.Marshal(errorResponse{
-		Error: msg,
-	})
-	if err != nil {
-		log.Printf("Error encoding error response: %s\n", err)
-		response.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	response.Header().Set("Content-Type", "application/json; charset=utf-8")
-	response.WriteHeader(code)
-	response.Write(responseBody)
-}
-
-func respondWithJSON(response http.ResponseWriter, code int, payload interface{}) {
-	responseBody, err := json.Marshal(payload)
-	if err != nil {
-		log.Printf("Error encoding success response: %s\n", err)
-		response.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	response.Header().Set("Content-Type", "application/json; charset=utf-8")
-	response.WriteHeader(code)
-	response.Write(responseBody)
-}
-
 func cleanBody(body string) string {
 	splitBody := strings.Split(body, " ")
 	newSplitBody := []string{}
