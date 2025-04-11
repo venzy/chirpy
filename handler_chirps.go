@@ -97,3 +97,25 @@ func cleanBody(body string) string {
 	}
 	return strings.Join(newSplitBody, " ")
 }
+
+func (cfg *apiConfig) handleGetChirps(response http.ResponseWriter, request *http.Request) {
+	chirpRows, err := cfg.db.GetChirps(request.Context())
+	if err != nil {
+		msg := fmt.Sprintf("chirps: Problem retrieving all chirps: %s", err)
+		log.Println(msg)
+		respondWithError(response, http.StatusInternalServerError, msg)
+		return
+	}
+	chirps := []Chirp{}
+	for _, chirp := range chirpRows {
+		chirps = append(chirps, Chirp{
+			ID: chirp.ID,
+			CreatedAt: chirp.CreatedAt,
+			UpdatedAt: chirp.UpdatedAt,
+			Body: chirp.Body,
+			UserID: chirp.UserID,
+		})
+	}
+
+	respondWithJSON(response, http.StatusOK, chirps)
+}
