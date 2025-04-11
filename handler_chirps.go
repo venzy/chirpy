@@ -119,3 +119,32 @@ func (cfg *apiConfig) handleGetChirps(response http.ResponseWriter, request *htt
 
 	respondWithJSON(response, http.StatusOK, chirps)
 }
+
+func (cfg *apiConfig) handleGetChirpByID(response http.ResponseWriter, request *http.Request) {
+	// Parse request params
+	chirpID, err := uuid.Parse(request.PathValue("chirpID"))
+	if err != nil {
+		msg := fmt.Sprintf("chirps: Problem parsing chirpID from request: %s", err)
+		log.Println(msg)
+		respondWithError(response, http.StatusBadRequest, msg)
+		return
+	}
+
+	// DB fetch - exercise calls for indiscriminate 404 response on any problem
+	row, err := cfg.db.GetChirpByID(request.Context(), chirpID)
+	if err != nil {
+		msg := fmt.Sprintf("chirps: Problem retrieving chirp with id '%s': %s", chirpID, err)
+		log.Println(msg)
+		respondWithError(response, http.StatusNotFound, msg)
+		return
+	}
+
+	// Response
+	respondWithJSON(response, http.StatusOK, Chirp{
+		ID: row.ID,
+		CreatedAt: row.CreatedAt,
+		UpdatedAt: row.UpdatedAt,
+		Body: row.Body,
+		UserID: row.UserID,
+	})
+}
