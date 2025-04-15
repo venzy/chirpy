@@ -24,6 +24,7 @@ type apiConfig struct {
 	maxChirpLength int
 	db *database.Queries
 	platform Platform
+	jwtSecret string
 }
 
 func (cfg *apiConfig) withMetricsInc(next http.Handler) http.Handler {
@@ -54,10 +55,17 @@ func main() {
 	}
 	dbQueries := database.New(db)
 
+	// Get secrets
+	jwtSecret := os.Getenv("JWT_SECRET")
+	if jwtSecret == "" {
+		log.Fatalf("JWT_SECRET environment needs to be defined")
+	}
+
 	cfg := &apiConfig{
 		maxChirpLength: 140,
 		db: dbQueries,
 		platform: platform,
+		jwtSecret: jwtSecret,
 	}
 
 	mux := http.NewServeMux()
@@ -67,7 +75,7 @@ func main() {
 	mux.HandleFunc("POST /admin/reset", cfg.handleReset)
 	mux.HandleFunc("POST /api/users", cfg.handleCreateUser)
 	mux.HandleFunc("POST /api/login", cfg.handleLogin)
-	mux.HandleFunc("POST /api/chirps", cfg.handleCreateChirp)
+	mux.Handle("POST /api/chirps", cfg.withAuthenticatedUser(cfg.handleCreateChirp))
 	mux.HandleFunc("GET /api/chirps", cfg.handleGetChirps)
 	mux.HandleFunc("GET /api/chirps/{chirpID}", cfg.handleGetChirpByID)
 

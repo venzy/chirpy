@@ -2,6 +2,8 @@ package auth
 
 import (
 	"fmt"
+	"net/http"
+	"regexp"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -60,4 +62,20 @@ func ValidateJWT(tokenString, tokenSecret string) (uuid.UUID, error) {
 	}
 
 	return uuid.Parse(id)
+}
+
+var bearerRegex = regexp.MustCompile(`^Bearer\s+([A-Za-z0-9-._~+/]+=*)$`)
+func GetBearerToken(headers http.Header) (string, error) {
+	auth := headers.Get("Authorization")
+	if auth == "" {
+		return "", fmt.Errorf("Missing or empty Authorization header")
+	}
+	
+	matches := bearerRegex.FindStringSubmatch(auth)
+	if len(matches) < 2 {
+		// Don't leak the actual token in logs
+		return "", fmt.Errorf("Malformed Authorization header")
+	}
+
+	return matches[1], nil
 }

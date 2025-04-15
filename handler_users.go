@@ -18,6 +18,7 @@ type User struct {
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 	Email     string    `json:"email"`
+	Token     string    `json:"token,omitempty"`
 }
 
 func (cfg *apiConfig) handleCreateUser(response http.ResponseWriter, request *http.Request) {
@@ -83,6 +84,7 @@ func (cfg *apiConfig) handleLogin(response http.ResponseWriter, request *http.Re
 	type requestParams struct {
 		Email string `json:"email"`
 		Password string `json:"password"`
+		ExpiresInSeconds int `json:"expires_in_seconds"`
 	}
 
 	decoder := json.NewDecoder(request.Body)
@@ -101,6 +103,10 @@ func (cfg *apiConfig) handleLogin(response http.ResponseWriter, request *http.Re
 		log.Println(msg)
 		respondWithError(response, http.StatusBadRequest, msg)
 		return
+	}
+
+	if params.ExpiresInSeconds <= 0 || params.ExpiresInSeconds > 3600 {
+		params.ExpiresInSeconds = 3600
 	}
 
 	// Get user
@@ -123,11 +129,20 @@ func (cfg *apiConfig) handleLogin(response http.ResponseWriter, request *http.Re
 	}
 
 	// Later, replace/supplement with auth token
+	token, err := auth.MakeJWT(user.ID, cfg.jwtSecret, time.Duration(params.ExpiresInSeconds) * time.Second)
+	if err != nil {
+		msg := fmt.Sprintf("users: login couldn't create JWT: %s", err)
+		log.Println(msg)
+		respondWithError(response, http.StatusInternalServerError, msg)
+		return
+	}
+
 	loggedInUser := User{
 		ID: user.ID,
 		CreatedAt: user.CreatedAt,
 		UpdatedAt: user.UpdatedAt,
 		Email: user.Email,
+		Token: token,
 	}
 	respondWithJSON(response, http.StatusOK, loggedInUser)
 }

@@ -20,10 +20,9 @@ type Chirp struct {
 	UserID    uuid.UUID `json:"user_id"`
 }
 
-func (cfg *apiConfig) handleCreateChirp(response http.ResponseWriter, request *http.Request) {
+func (cfg *apiConfig) handleCreateChirp(response http.ResponseWriter, request *http.Request, userID uuid.UUID) {
 	type requestParams struct {
 		Body string `json:"body"`
-		UserID string `json:"user_id"`
 	}
 
 	decoder := json.NewDecoder(request.Body)
@@ -36,16 +35,9 @@ func (cfg *apiConfig) handleCreateChirp(response http.ResponseWriter, request *h
 	}
 
 	// Confirm user exists
-	parsedUserID, err := uuid.Parse(params.UserID)
+	_, err = cfg.db.GetUserByID(request.Context(), userID)
 	if err != nil {
-		msg := fmt.Sprintf("chirps: Error parsing supplied UserID: %s", err)
-		log.Println(msg)
-		respondWithError(response, http.StatusBadRequest, msg)
-		return
-	}
-	_, err = cfg.db.GetUserByID(request.Context(), parsedUserID)
-	if err != nil {
-		msg := fmt.Sprintf("chirps: Could not get user with ID '%s': %s", params.UserID, err)
+		msg := fmt.Sprintf("chirps: Could not get user with ID '%s': %s", userID, err)
 		log.Println(msg)
 		respondWithError(response, http.StatusBadRequest, msg)
 		return
@@ -65,7 +57,7 @@ func (cfg *apiConfig) handleCreateChirp(response http.ResponseWriter, request *h
 	// Create in DB
 	newChirpRow, err := cfg.db.CreateChirp(request.Context(), database.CreateChirpParams{
 		Body: cleanedBody,
-		UserID: parsedUserID,
+		UserID: userID,
 	})
 	if err != nil {
 		msg := fmt.Sprintf("chirps: Problem creating chirp: %s", err)
