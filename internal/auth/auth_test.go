@@ -162,21 +162,27 @@ func TestGetBearerToken(t * testing.T) {
 	}
 }
 
-func TestMakeRefreshToken(t * testing.T) {
-	for i := 0; i < 100; i++ {
-		refreshToken, err := MakeRefreshToken()
-		if err != nil {
-			t.Errorf("MakeRefreshToken() should have succeeded, err was: %s", err)
-			return
-		}
-		t.Logf("Refresh token: %s", refreshToken)
+func TestMakeRefreshToken(t *testing.T) {
+    tokens := make(map[string]struct{})
+    for i := 0; i < 100; i++ {
+        refreshToken, err := MakeRefreshToken()
+        if err != nil {
+            t.Errorf("MakeRefreshToken() should have succeeded, err was: %s", err)
+            return
+        }
+        t.Logf("Refresh token: %s", refreshToken)
 		// Note, hex.EncodeToString() returns a string of 2 * len(byte slice) characters
 		// So, 32 bytes of random data will be 64 characters in the string
 		// representation.
 		// It looks like hex.EncodeToString() doesn't try to be clever and strip leading zeroes
-		if len(refreshToken) != 64 {
-			t.Errorf("MakeRefreshToken() should have returned a 64 character token, but was %d characters", len(refreshToken))
-			return
-		}
-	}
+        if len(refreshToken) != 64 {
+            t.Errorf("MakeRefreshToken() should have returned a 64 character token, but was %d characters", len(refreshToken))
+            return
+        }
+        if _, exists := tokens[refreshToken]; exists {
+            t.Errorf("MakeRefreshToken() generated a duplicate token: %s", refreshToken)
+            return
+        }
+        tokens[refreshToken] = struct{}{}
+    }
 }
