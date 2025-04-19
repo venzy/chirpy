@@ -173,8 +173,8 @@ func (cfg *apiConfig) handleLogin(response http.ResponseWriter, request *http.Re
 // boot.dev AI, based on me identifying a cleanup issue, and deciding not to
 // address it for now:
 //
-// This function generates and issues a new refresh token for the user. 
-// While cleanup of old tokens will not be performed currently, 
+// This function generates and issues a new access token for the user. 
+// While cleanup of expired refresh tokens will not be performed currently, 
 // we recognize the importance of preventing refresh token bloat over time.
 //
 // Potential future improvements:
