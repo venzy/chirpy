@@ -13,12 +13,16 @@ import (
 	"github.com/venzy/chirpy/internal/database"
 )
 
+const accessTokenExpiry = time.Hour
+const refreshTokenExpiry = 60 * 24 * time.Hour // 60 days
+
 type User struct {
-	ID        uuid.UUID `json:"id"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
-	Email     string    `json:"email"`
-	Token     string    `json:"token,omitempty"`
+	ID           uuid.UUID `json:"id"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
+	Email        string    `json:"email"`
+	Token        string    `json:"token,omitempty"`
+	RefreshToken string    `json:"refresh_token,omitempty"`
 }
 
 func (cfg *apiConfig) handleCreateUser(response http.ResponseWriter, request *http.Request) {
@@ -84,7 +88,6 @@ func (cfg *apiConfig) handleLogin(response http.ResponseWriter, request *http.Re
 	type requestParams struct {
 		Email string `json:"email"`
 		Password string `json:"password"`
-		ExpiresInSeconds int `json:"expires_in_seconds"`
 	}
 
 	decoder := json.NewDecoder(request.Body)
@@ -97,16 +100,12 @@ func (cfg *apiConfig) handleLogin(response http.ResponseWriter, request *http.Re
 		return
 	}
 
-	// Basic validation
+	// Validate email is well-formed
 	if _, err := mail.ParseAddress(params.Email); err != nil {
 		msg := fmt.Sprintf("users: Bad email address: %s", err)
 		log.Println(msg)
 		respondWithError(response, http.StatusBadRequest, msg)
 		return
-	}
-
-	if params.ExpiresInSeconds <= 0 || params.ExpiresInSeconds > 3600 {
-		params.ExpiresInSeconds = 3600
 	}
 
 	// Get user
@@ -119,7 +118,7 @@ func (cfg *apiConfig) handleLogin(response http.ResponseWriter, request *http.Re
 		return
 	}
 
-	// Auth
+	// Check password
 	if err = auth.CheckPasswordHash(user.HashedPassword, params.Password); err != nil {
 		msg := fmt.Sprintf("users: Password hash mismatch or error: %s", err)
 		log.Println(msg)
@@ -128,10 +127,32 @@ func (cfg *apiConfig) handleLogin(response http.ResponseWriter, request *http.Re
 		return
 	}
 
-	// Later, replace/supplement with auth token
-	token, err := auth.MakeJWT(user.ID, cfg.jwtSecret, time.Duration(params.ExpiresInSeconds) * time.Second)
+	// Create access token
+	token, err := auth.MakeJWT(user.ID, cfg.jwtSecret, accessTokenExpiry)
 	if err != nil {
 		msg := fmt.Sprintf("users: login couldn't create JWT: %s", err)
+		log.Println(msg)
+		respondWithError(response, http.StatusInternalServerError, msg)
+		return
+	}
+
+	// Create refresh token
+	refreshToken, err := auth.MakeRefreshToken()
+	if err != nil {
+		msg := fmt.Sprintf("users: login couldn't create refresh token: %s", err)
+		log.Println(msg)
+		respondWithError(response, http.StatusInternalServerError, msg)
+		return
+	}
+
+	// Store refresh token in DB
+	_, err = cfg.db.CreateRefreshToken(request.Context(), database.CreateRefreshTokenParams{
+		UserID: user.ID,
+		Token: refreshToken,
+		ExpiresAt: time.Now().Add(refreshTokenExpiry),
+	})
+	if err != nil {
+		msg := fmt.Sprintf("users: login couldn't store refresh token: %s", err)
 		log.Println(msg)
 		respondWithError(response, http.StatusInternalServerError, msg)
 		return
@@ -143,7 +164,80 @@ func (cfg *apiConfig) handleLogin(response http.ResponseWriter, request *http.Re
 		UpdatedAt: user.UpdatedAt,
 		Email: user.Email,
 		Token: token,
+		RefreshToken: refreshToken,
 	}
 	respondWithJSON(response, http.StatusOK, loggedInUser)
 }
-	
+
+// DV: Here is a future-looking commentary, based on a long discussion with the
+// boot.dev AI, based on me identifying a cleanup issue, and deciding not to
+// address it for now:
+//
+// This function generates and issues a new refresh token for the user. 
+// While cleanup of old tokens will not be performed currently, 
+// we recognize the importance of preventing refresh token bloat over time.
+//
+// Potential future improvements:
+// 1. Retain only the last 2-3 refresh tokens per session/user to allow
+//    recovery from communication failures while minimizing risks of misuse.
+// 2. Cleanup stale or expired tokens during future refresh requests, 
+//    ensuring efficiency without leaving behind unnecessary data.
+// 3. Consider session-specific identifiers (e.g., UUIDs) to manage tokens 
+//    across different sessions or browser modes on the same device.
+// 4. Device fingerprints or session annotations could enhance management 
+//    and allow multi-session support (e.g., regular vs incognito mode).
+// 5. Use database indices (e.g., on `expires_at`) to ensure efficient 
+//    queries and pruning during cleanup.
+//
+// Current tokens remain valid until explicitly revoked or naturally expired.
+func (cfg *apiConfig) handleRefresh(response http.ResponseWriter, request *http.Request) {
+    // Get refresh token from Authorization header
+    refreshTokenHeader, err := auth.GetBearerToken(request.Header)
+    if err != nil {
+        respondWithError(response, http.StatusUnauthorized, "Invalid refresh token")
+        return
+    }
+
+    // Look up the refresh token in the database, validating the user ID at the same time
+    refreshTokenDB, err := cfg.db.GetUserIDWithRefreshToken(request.Context(), refreshTokenHeader)
+    if err != nil {
+        respondWithError(response, http.StatusUnauthorized, "Invalid refresh token")
+        return
+    }
+
+    // Check if token is expired or revoked
+    if refreshTokenDB.ExpiresAt.Before(time.Now()) || refreshTokenDB.RevokedAt.Valid {
+        respondWithError(response, http.StatusUnauthorized, "Invalid refresh token")
+        return
+    }
+
+    // Generate a new access token
+    newAccessJWT, err := auth.MakeJWT(refreshTokenDB.UserID, cfg.jwtSecret, accessTokenExpiry)
+    if err != nil {
+        respondWithError(response, http.StatusInternalServerError, "Could not generate new access token")
+        return
+    }
+
+    // Respond with the new access token
+    respondWithJSON(response, http.StatusOK, map[string]string{
+        "token": newAccessJWT,
+    })
+}
+
+func (cfg *apiConfig) handleRevoke(response http.ResponseWriter, request *http.Request) {
+	// Get refresh token from Authorization header
+	refreshTokenHeader, err := auth.GetBearerToken(request.Header)
+	if err != nil {
+		respondWithError(response, http.StatusUnauthorized, "Invalid refresh token")
+		return
+	}
+
+	// Revoke the refresh token in the database
+	err = cfg.db.RevokeRefreshToken(request.Context(), refreshTokenHeader)
+	if err != nil {
+		respondWithError(response, http.StatusInternalServerError, "Could not revoke refresh token")
+		return
+	}
+	// Respond with No Content
+	response.WriteHeader(http.StatusNoContent)
+}
