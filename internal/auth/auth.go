@@ -3,9 +3,10 @@ package auth
 import (
 	"crypto/rand"
 	"encoding/hex"
-	"fmt"
+	"errors"
 	"net/http"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -60,7 +61,7 @@ func ValidateJWT(tokenString, tokenSecret string) (uuid.UUID, error) {
 		return uuid.UUID{}, err
 	}
 	if id == "" {
-		return uuid.UUID{}, fmt.Errorf("subject claim is missing")
+		return uuid.UUID{}, errors.New("subject claim is missing")
 	}
 
 	return uuid.Parse(id)
@@ -70,13 +71,13 @@ var bearerRegex = regexp.MustCompile(`^Bearer\s+([A-Za-z0-9-._~+/]+=*)$`)
 func GetBearerToken(headers http.Header) (string, error) {
 	auth := headers.Get("Authorization")
 	if auth == "" {
-		return "", fmt.Errorf("Missing or empty Authorization header")
+		return "", errors.New("Missing or empty Authorization header")
 	}
 	
 	matches := bearerRegex.FindStringSubmatch(auth)
 	if len(matches) < 2 {
 		// Don't leak the actual token in logs
-		return "", fmt.Errorf("Malformed Authorization header")
+		return "", errors.New("Malformed Authorization header")
 	}
 
 	return matches[1], nil
@@ -89,4 +90,20 @@ func MakeRefreshToken() (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(tokenBytes), nil
+}
+
+func GetAPIKey(headers http.Header) (string, error) {
+	authHeader := headers.Get("Authorization")
+	if authHeader == "" {
+		return "", errors.New("Missing Authorization header")
+	}
+	const prefix = "ApiKey "
+	if !strings.HasPrefix(authHeader, prefix) {
+		return "", errors.New("Authorization header must start with 'ApiKey '")
+	}
+	apiKey := strings.TrimSpace(strings.TrimPrefix(authHeader, prefix))
+	if apiKey == "" {
+		return "", errors.New("API key is empty")
+	}
+	return apiKey, nil
 }

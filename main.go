@@ -25,6 +25,7 @@ type apiConfig struct {
 	db *database.Queries
 	platform Platform
 	jwtSecret string
+	polkaKey string
 }
 
 func (cfg *apiConfig) withMetricsInc(next http.Handler) http.Handler {
@@ -61,11 +62,17 @@ func main() {
 		log.Fatalf("JWT_SECRET environment needs to be defined")
 	}
 
+	polkaKey := os.Getenv("POLKA_KEY")
+	if polkaKey == "" {
+		log.Fatalf("POLKA_KEY environment needs to be defined")
+	}
+
 	cfg := &apiConfig{
 		maxChirpLength: 140,
 		db: dbQueries,
 		platform: platform,
 		jwtSecret: jwtSecret,
+		polkaKey: polkaKey,
 	}
 
 	mux := http.NewServeMux()
