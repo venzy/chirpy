@@ -17,6 +17,14 @@ SET updated_at = NOW(),
 WHERE id = $1
 RETURNING *;
 
+-- name: UpgradeUser :one
+-- This query is used to upgrade a user to a "chirpy red" status.
+UPDATE users
+SET updated_at = NOW(),
+    is_chirpy_red = TRUE
+WHERE id = $1
+RETURNING *;
+
 -- name: GetUserByID :one
 SELECT * FROM users WHERE id = $1;
 

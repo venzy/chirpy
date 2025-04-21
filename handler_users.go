@@ -21,6 +21,8 @@ type User struct {
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
 	Email        string    `json:"email"`
+	IsChirpyRed  bool      `json:"is_chirpy_red"`
+	// The following fields are not stored in the database
 	Token        string    `json:"token,omitempty"`
 	RefreshToken string    `json:"refresh_token,omitempty"`
 }
@@ -80,6 +82,7 @@ func (cfg *apiConfig) handleCreateUser(response http.ResponseWriter, request *ht
 		CreatedAt: newRow.CreatedAt,
 		UpdatedAt: newRow.UpdatedAt,
 		Email: newRow.Email,
+		IsChirpyRed: newRow.IsChirpyRed,
 	}
 	respondWithJSON(response, http.StatusCreated, newUser)
 }
@@ -141,6 +144,7 @@ func (cfg *apiConfig) handleUpdateUser(response http.ResponseWriter, request *ht
 		CreatedAt: updatedRow.CreatedAt,
 		UpdatedAt: updatedRow.UpdatedAt,
 		Email: updatedRow.Email,
+		IsChirpyRed: updatedRow.IsChirpyRed,
 		}
 	
 	respondWithJSON(response, http.StatusOK, updatedUser)
@@ -226,6 +230,7 @@ func (cfg *apiConfig) handleLogin(response http.ResponseWriter, request *http.Re
 		CreatedAt: user.CreatedAt,
 		UpdatedAt: user.UpdatedAt,
 		Email: user.Email,
+		IsChirpyRed: user.IsChirpyRed,
 		Token: token,
 		RefreshToken: refreshToken,
 	}
@@ -302,5 +307,27 @@ func (cfg *apiConfig) handleRevoke(response http.ResponseWriter, request *http.R
 		return
 	}
 	// Respond with No Content
+	response.WriteHeader(http.StatusNoContent)
+}
+
+func (cfg *apiConfig) handleUserUpgrade(response http.ResponseWriter, request *http.Request, userID uuid.UUID) {
+	// Check user exists separately rather than trying to parse the error
+	_, err := cfg.db.GetUserByID(request.Context(), userID)
+	if err != nil {
+		msg := fmt.Sprintf("users: Could not find user with ID '%s': %s", userID, err)
+		log.Println(msg)
+		respondWithError(response, http.StatusNotFound, msg)
+		return
+	}
+
+	// Perform the upgrade
+	_, err = cfg.db.UpgradeUser(request.Context(), userID)
+	if err != nil {
+		msg := fmt.Sprintf("users: Error upgrading user: %s\n", err)
+		log.Println(msg)
+		respondWithError(response, http.StatusInternalServerError, msg)
+		return
+	}
+
 	response.WriteHeader(http.StatusNoContent)
 }

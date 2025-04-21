@@ -73,15 +73,19 @@ func main() {
 	mux.HandleFunc("GET /api/healthz", handleReady)
 	mux.HandleFunc("GET /admin/metrics", cfg.handleMetrics)
 	mux.HandleFunc("POST /admin/reset", cfg.handleReset)
+
 	mux.HandleFunc("POST /api/users", cfg.handleCreateUser)
 	mux.Handle("PUT /api/users", cfg.withAuthenticatedUser(cfg.handleUpdateUser))
 	mux.HandleFunc("POST /api/login", cfg.handleLogin)
 	mux.HandleFunc("POST /api/refresh", cfg.handleRefresh)
 	mux.HandleFunc("POST /api/revoke", cfg.handleRevoke)
+
 	mux.Handle("POST /api/chirps", cfg.withAuthenticatedUser(cfg.handleCreateChirp))
 	mux.HandleFunc("GET /api/chirps", cfg.handleGetChirps)
 	mux.HandleFunc("GET /api/chirps/{chirpID}", cfg.handleGetChirpByID)
 	mux.Handle("DELETE /api/chirps/{chirpID}", cfg.withAuthenticatedUser(cfg.handleDeleteChirpByID))
+
+	mux.HandleFunc("POST /api/polka/webhooks", cfg.handlePolkaWebhook)
 
 	server := &http.Server{Handler: mux, Addr: ":8080"}
 	server.ListenAndServe()
