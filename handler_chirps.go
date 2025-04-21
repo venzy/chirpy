@@ -91,13 +91,41 @@ func cleanBody(body string) string {
 }
 
 func (cfg *apiConfig) handleGetChirps(response http.ResponseWriter, request *http.Request) {
-	chirpRows, err := cfg.db.GetChirps(request.Context())
-	if err != nil {
-		msg := fmt.Sprintf("chirps: Problem retrieving all chirps: %s", err)
-		log.Println(msg)
-		respondWithError(response, http.StatusInternalServerError, msg)
-		return
+	var chirpRows []database.Chirp
+
+	// Get optional author_id query param
+	author_id := request.URL.Query().Get("author_id")
+
+	if author_id != "" {
+		// Parse request params
+		authorID, err := uuid.Parse(author_id)
+		if err != nil {
+			msg := fmt.Sprintf("chirps: Problem parsing author_id from request: %s", err)
+			log.Println(msg)
+			respondWithError(response, http.StatusBadRequest, msg)
+			return
+		}
+
+		// DB fetch
+		chirpRows, err = cfg.db.GetChirpsByAuthorID(request.Context(), authorID)
+		if err != nil {
+			msg := fmt.Sprintf("chirps: Problem retrieving chirps by author_id '%s': %s", authorID, err)
+			log.Println(msg)
+			respondWithError(response, http.StatusInternalServerError, msg)
+			return
+		}
+	} else {
+		// DB fetch
+		var err error
+		chirpRows, err = cfg.db.GetChirps(request.Context())
+		if err != nil {
+			msg := fmt.Sprintf("chirps: Problem retrieving all chirps: %s", err)
+			log.Println(msg)
+			respondWithError(response, http.StatusInternalServerError, msg)
+			return
+		}
 	}
+
 	chirps := []Chirp{}
 	for _, chirp := range chirpRows {
 		chirps = append(chirps, Chirp{
