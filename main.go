@@ -81,6 +81,7 @@ func main() {
 	mux.Handle("POST /api/chirps", cfg.withAuthenticatedUser(cfg.handleCreateChirp))
 	mux.HandleFunc("GET /api/chirps", cfg.handleGetChirps)
 	mux.HandleFunc("GET /api/chirps/{chirpID}", cfg.handleGetChirpByID)
+	mux.Handle("DELETE /api/chirps/{chirpID}", cfg.withAuthenticatedUser(cfg.handleDeleteChirpByID))
 
 	server := &http.Server{Handler: mux, Addr: ":8080"}
 	server.ListenAndServe()
