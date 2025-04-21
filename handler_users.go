@@ -84,6 +84,69 @@ func (cfg *apiConfig) handleCreateUser(response http.ResponseWriter, request *ht
 	respondWithJSON(response, http.StatusCreated, newUser)
 }
 
+func (cfg *apiConfig) handleUpdateUser(response http.ResponseWriter, request *http.Request, userID uuid.UUID) {
+	type requestParams struct {
+		Email string `json:"email"`
+		Password string `json:"password"`
+	}
+
+	decoder := json.NewDecoder(request.Body)
+	params := requestParams{}
+	err := decoder.Decode(&params)
+	if err != nil {
+		msg := fmt.Sprintf("users: Error decoding updateUser params: %s\n", err)
+		log.Println(msg)
+		respondWithError(response, http.StatusBadRequest, msg)
+		return
+	}
+
+	// Basic validation
+	if _, err := mail.ParseAddress(params.Email); err != nil {
+		msg := fmt.Sprintf("users: Bad email address: %s", err)
+		log.Println(msg)
+		respondWithError(response, http.StatusBadRequest, msg)
+		return
+	}
+
+	if len(params.Password) < 1 {
+		msg := fmt.Sprintf("users: Password len > 1 required")
+		log.Println(msg)
+		respondWithError(response, http.StatusBadRequest, msg)
+		return
+	}
+
+	// Update in DB, then return representation of updated row as response
+	hashedPassword, err := auth.HashPassword(params.Password)
+	if err != nil {
+		msg := fmt.Sprintf("users: Problem hashing supplied password")
+		respondWithError(response, http.StatusInternalServerError, msg)
+		return
+	}
+
+	updatedRow, err := cfg.db.UpdateUser(request.Context(), database.UpdateUserParams{
+		ID: userID,
+		Email: params.Email,
+		HashedPassword: hashedPassword,
+	})
+
+	if err != nil {	
+		msg := fmt.Sprintf("users: Problem updating user: %s", err)
+		log.Println(msg)
+		respondWithError(response, http.StatusInternalServerError, msg)
+		return
+	}
+
+	updatedUser := User{
+		ID: updatedRow.ID,
+		CreatedAt: updatedRow.CreatedAt,
+		UpdatedAt: updatedRow.UpdatedAt,
+		Email: updatedRow.Email,
+		}
+	
+	respondWithJSON(response, http.StatusOK, updatedUser)
+}
+
+
 func (cfg *apiConfig) handleLogin(response http.ResponseWriter, request *http.Request) {
 	type requestParams struct {
 		Email string `json:"email"`
