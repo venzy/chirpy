@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -93,8 +94,24 @@ func cleanBody(body string) string {
 func (cfg *apiConfig) handleGetChirps(response http.ResponseWriter, request *http.Request) {
 	var chirpRows []database.Chirp
 
-	// Get optional author_id query param
+	// Get optional query params
 	author_id := request.URL.Query().Get("author_id")
+	sort_dir := request.URL.Query().Get("sort")
+
+	// Validate sort param
+	if sort_dir != "" && sort_dir != "asc" && sort_dir != "desc" {
+		msg := fmt.Sprintf("chirps: Invalid sort param '%s', must be 'asc' or 'desc'", sort_dir)
+		log.Println(msg)
+		respondWithError(response, http.StatusBadRequest, msg)
+		return
+	} else if sort_dir == "" {
+		// Default to ascending if not specified
+		sort_dir = "asc"
+	}
+
+	// NOTE: Exercise suggests just sort in-mem in Go rather than SQL.
+	// I had a quick go at supplying it as a param to the SQL query, but the
+	// sqlc generated interface didn't look right
 
 	if author_id != "" {
 		// Parse request params
@@ -136,6 +153,14 @@ func (cfg *apiConfig) handleGetChirps(response http.ResponseWriter, request *htt
 			UserID: chirp.UserID,
 		})
 	}
+
+	// Sort chirps in memory
+	sort.Slice(chirps, func(i, j int) bool {
+		if sort_dir == "asc" {
+			return chirps[i].CreatedAt.Before(chirps[j].CreatedAt)
+		}
+		return chirps[i].CreatedAt.After(chirps[j].CreatedAt)
+	})
 
 	respondWithJSON(response, http.StatusOK, chirps)
 }
